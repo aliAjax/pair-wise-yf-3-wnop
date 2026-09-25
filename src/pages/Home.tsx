@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import Header from '../components/Header';
 import FilterPanel from '../components/FilterPanel';
 import VisualizationPanel from '../components/VisualizationPanel';
+import MonthlyReviews from '../components/MonthlyReviews';
+import ReviewOverwriteModal from '../components/ReviewOverwriteModal';
 import MemoryCard from '../components/MemoryCard';
 import MemoryModal from '../components/MemoryModal';
 import { useMemoryStore } from '../store/memoryStore';
@@ -9,7 +11,9 @@ import type { Filters } from '../utils/helpers';
 import { filterMemories } from '../utils/helpers';
 import type { SmellMemory } from '../utils/constants';
 import type { MemoryInput } from '../store/memoryStore';
-import { BookOpenCheck } from 'lucide-react';
+import type { MonthlyReview } from '../utils/review';
+import { formatMonth } from '../utils/review';
+import { BookOpenCheck, CheckCircle2 } from 'lucide-react';
 
 const defaultFilters: Filters = {
   smellType: '',
@@ -18,20 +22,30 @@ const defaultFilters: Filters = {
 };
 
 export default function Home() {
-  const { memories, initIfEmpty, addMemory, updateMemory, deleteMemory } = useMemoryStore();
+  const { memories, reviews, initIfEmpty, addMemory, updateMemory, deleteMemory, saveMonthlyReview } = useMemoryStore();
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<SmellMemory | null>(null);
+  const [pendingReview, setPendingReview] = useState<MonthlyReview | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   useEffect(() => {
     initIfEmpty();
   }, [initIfEmpty]);
 
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(null), 2600);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
+
   const filteredMemories = useMemo(
     () => filterMemories(memories, filters),
     [memories, filters],
   );
+
+  const hasFilter = !!(filters.smellType || filters.season || filters.emotion);
 
   const handleFilterChange = (key: keyof Filters, value: string) => {
     setFilters((f) => ({ ...f, [key]: value }));
@@ -66,6 +80,30 @@ export default function Home() {
     });
   };
 
+  const handleSaved = (review: MonthlyReview, overwritten: boolean) => {
+    setToast(
+      overwritten
+        ? `已用当前结果更新 ${formatMonth(review.month)} 回顾`
+        : `已封存 ${formatMonth(review.month)} 回顾`,
+    );
+  };
+
+  const handleConfirmOverwrite = () => {
+    if (!pendingReview) return;
+    // 覆盖数字但保留首次归档时间，方便辨认这份回顾的来历
+    const old = reviews.find((r) => r.month === pendingReview.month);
+    const merged: MonthlyReview = old
+      ? { ...pendingReview, created_at: old.created_at }
+      : pendingReview;
+    saveMonthlyReview(merged);
+    setPendingReview(null);
+    handleSaved(merged, !!old);
+  };
+
+  const oldReviewForModal = pendingReview
+    ? reviews.find((r) => r.month === pendingReview.month) ?? null
+    : null;
+
   return (
     <div className="min-h-screen">
       <Header onAdd={openAddModal} memoryCount={memories.length} />
@@ -79,6 +117,15 @@ export default function Home() {
         />
 
         <VisualizationPanel memories={filteredMemories} onSelect={scrollToCard} />
+
+        <MonthlyReviews
+          filteredMemories={filteredMemories}
+          hasFilter={hasFilter}
+          reviews={reviews}
+          onSave={saveMonthlyReview}
+          onSaved={handleSaved}
+          onRequestOverwrite={setPendingReview}
+        />
 
         <section className="mt-2">
           <div className="flex items-center justify-between mb-4">
@@ -95,12 +142,12 @@ export default function Home() {
             <div className="bg-paper-50/70 backdrop-blur rounded-3xl border-2 border-dashed border-paper-400 py-20 text-center">
               <div className="text-6xl mb-4 select-none">🍂</div>
               <h3 className="font-serif text-2xl text-ink-800 mb-2">
-                {(filters.smellType || filters.season || filters.emotion)
+                {hasFilter
                   ? '没有匹配的气味记忆'
                   : '还没有封存任何气味'}
               </h3>
               <p className="text-ink-700/60 max-w-md mx-auto mb-6">
-                {(filters.smellType || filters.season || filters.emotion)
+                {hasFilter
                   ? '换一组筛选条件试试？或者先封存一段新的气味'
                   : '空气中一定有让你难忘的味道——无论是衣柜里的樟木香，还是雨后操场的青草气'}
               </p>
@@ -108,7 +155,7 @@ export default function Home() {
                 <button onClick={openAddModal} className="btn-primary">
                   封存第一段气味
                 </button>
-                {(filters.smellType || filters.season || filters.emotion) && (
+                {hasFilter && (
                   <button onClick={resetFilters} className="btn-secondary">
                     清除筛选条件
                   </button>
@@ -144,6 +191,23 @@ export default function Home() {
         onSubmit={handleSubmit}
         editingData={editing}
       />
+
+      <ReviewOverwriteModal
+        isOpen={!!pendingReview}
+        oldReview={oldReviewForModal}
+        newReview={pendingReview}
+        onCancel={() => setPendingReview(null)}
+        onConfirm={handleConfirmOverwrite}
+      />
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-fadeInUp pointer-events-none">
+          <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-moss-500 text-paper-50 text-sm font-medium shadow-paper-hover">
+            <CheckCircle2 className="w-4 h-4" />
+            {toast}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
