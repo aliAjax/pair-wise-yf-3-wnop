@@ -4,6 +4,8 @@ import FilterPanel from '../components/FilterPanel';
 import VisualizationPanel from '../components/VisualizationPanel';
 import MemoryCard from '../components/MemoryCard';
 import MemoryModal from '../components/MemoryModal';
+import ReviewModal from '../components/ReviewModal';
+import MonthlyReviews from '../components/MonthlyReviews';
 import { useMemoryStore } from '../store/memoryStore';
 import type { Filters } from '../utils/helpers';
 import { filterMemories } from '../utils/helpers';
@@ -18,11 +20,12 @@ const defaultFilters: Filters = {
 };
 
 export default function Home() {
-  const { memories, initIfEmpty, addMemory, updateMemory, deleteMemory } = useMemoryStore();
+  const { memories, reviews, initIfEmpty, addMemory, updateMemory, deleteMemory, saveReview } = useMemoryStore();
   const [filters, setFilters] = useState<Filters>(defaultFilters);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<SmellMemory | null>(null);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
 
   useEffect(() => {
     initIfEmpty();
@@ -78,7 +81,17 @@ export default function Home() {
           resultCount={filteredMemories.length}
         />
 
-        <VisualizationPanel memories={filteredMemories} onSelect={scrollToCard} />
+        <VisualizationPanel
+          memories={filteredMemories}
+          onSelect={scrollToCard}
+          onArchive={() => setReviewModalOpen(true)}
+        />
+
+        <MonthlyReviews
+          reviews={reviews}
+          resultCount={filteredMemories.length}
+          onArchive={() => setReviewModalOpen(true)}
+        />
 
         <section className="mt-2">
           <div className="flex items-center justify-between mb-4">
@@ -143,6 +156,15 @@ export default function Home() {
         onClose={() => setModalOpen(false)}
         onSubmit={handleSubmit}
         editingData={editing}
+      />
+
+      <ReviewModal
+        isOpen={reviewModalOpen}
+        onClose={() => setReviewModalOpen(false)}
+        filteredMemories={filteredMemories}
+        allMemories={memories}
+        reviews={reviews}
+        onSave={saveReview}
       />
     </div>
   );
